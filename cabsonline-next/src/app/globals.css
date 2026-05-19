@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fafafa;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.map-marker {
+  align-items: center;
+  border: 2px solid #ffffff;
+  border-radius: 9999px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 25%);
+  color: #18181b;
+  display: flex;
+  font-size: 12px;
+  font-weight: 800;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.map-marker-pickup {
+  background: #eab308;
+}
+
+.map-marker-destination {
+  background: #38bdf8;
+}
