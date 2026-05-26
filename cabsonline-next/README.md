@@ -2,7 +2,7 @@
 
 ## 1. Public URL of the deployed application
 
-Deployment URL: TODO - paste the final public browser URL here before submission.
+Deployment URL: https://cabs-online-eight.vercel.app/
 
 Local development URL: http://localhost:3000
 
@@ -196,4 +196,4 @@ AI support was used to refactor the original booking/admin workflow into a moder
 
 AI was also used during testing. The application was checked through browser-based end-to-end QA covering customer booking, invalid form submissions, map point selection, admin search, booking assignment, detail pages, and admin map behavior. Issues found during testing were fixed and retested, including the Supabase RPC mismatch for assignment and the admin map's direct table access problem.
 
-The final result is more usable than the original Part 1-style flow because it includes responsive pages, richer trip selection, a driver-focused detail page, and visual map-based review of bookings.
+Overall, I took a higher-level approach to this part 2, making the use of cursor agents and codex, I was able to smoothly refactor my application into a accessible vercel app with simple features.  The final result is more usable than the original Part 1-style flow because it includes responsive pages, richer trip selection, a driver-focused detail page, and visual map-based review of bookings.
