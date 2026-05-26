@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import HeaderNav from "@/components/HeaderNav";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
 
@@ -16,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "CabsOnline",
-  description: "Online cab booking and admin dashboard",
+  description: "Online cab booking and driver dashboard",
 };
 
 export default function RootLayout({
@@ -35,20 +36,7 @@ export default function RootLayout({
             <Link className="text-xl font-bold text-zinc-950" href="/">
               CabsOnline
             </Link>
-            <div className="flex flex-wrap gap-3 text-sm font-medium text-zinc-700">
-              <Link className="hover:text-yellow-700" href="/booking">
-                Booking
-              </Link>
-              <Link className="hover:text-yellow-700" href="/admin/bookings">
-                Admin bookings
-              </Link>
-              <Link className="hover:text-yellow-700" href="/admin/map">
-                Admin map
-              </Link>
-              <Link className="hover:text-yellow-700" href="/login">
-                Login
-              </Link>
-            </div>
+            <HeaderNav />
           </nav>
         </header>
         {children}

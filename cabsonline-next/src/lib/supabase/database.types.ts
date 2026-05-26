@@ -160,6 +160,33 @@ export type Database = {
           pickup_time: string;
         }[];
       };
+      cabsonline_get_admin_bookings: {
+        Args: {
+          p_booking_reference?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["cabsonline_bookings"]["Row"][];
+      };
+      cabsonline_get_active_admin_bookings: {
+        Args: Record<string, never>;
+        Returns: Database["public"]["Tables"]["cabsonline_bookings"]["Row"][];
+      };
+      cabsonline_get_admin_map_bookings: {
+        Args: {
+          p_booking_reference?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["cabsonline_bookings"]["Row"][];
+      };
+      cabsonline_assign_booking: {
+        Args: {
+          p_booking_reference: string;
+          p_driver_profile_id?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["cabsonline_bookings"]["Row"][];
+      };
+      cabsonline_get_default_driver_profile_id: {
+        Args: Record<string, never>;
+        Returns: string;
+      };
       cabsonline_generate_booking_reference: {
         Args: Record<string, never>;
         Returns: string;

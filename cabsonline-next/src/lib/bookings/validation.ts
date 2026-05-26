@@ -73,7 +73,10 @@ export function validateBookingForm(values: BookingFormValues) {
 
   if (values.pickup_date && values.pickup_time) {
     const pickupAt = new Date(`${values.pickup_date}T${values.pickup_time}`);
-    if (Number.isNaN(pickupAt.getTime()) || pickupAt < new Date()) {
+    const currentMinute = new Date();
+    currentMinute.setSeconds(0, 0);
+
+    if (Number.isNaN(pickupAt.getTime()) || pickupAt < currentMinute) {
       errors.pickup_time = "Pickup date and time must not be in the past.";
     }
   }
@@ -87,5 +90,10 @@ export function hasBookingFormErrors(errors: BookingFormErrors) {
 
 export function nullableText(value: string) {
   const trimmed = value.trim();
-  return trimmed ? trimmed : null;
+
+  if (!trimmed || trimmed === "=") {
+    return null;
+  }
+
+  return trimmed;
 }

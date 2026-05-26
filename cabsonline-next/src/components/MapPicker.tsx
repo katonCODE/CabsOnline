@@ -7,10 +7,17 @@ export type MapPoint = {
   longitude: number;
 };
 
+export type MapSelectionMode = "pickup" | "destination";
+
 type MapPickerProps = {
+  activeMode: MapSelectionMode;
+  distanceKm: number | null;
   destination: MapPoint | null;
-  onDestinationChange: (point: MapPoint) => void;
-  onPickupChange: (point: MapPoint) => void;
+  focusPoint: MapPoint | null;
+  onClearDestination: () => void;
+  onClearPickup: () => void;
+  onModeChange: (mode: MapSelectionMode) => void;
+  onPointSelect: (mode: MapSelectionMode, point: MapPoint) => void;
   pickup: MapPoint | null;
 };
 

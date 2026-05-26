@@ -19,3 +19,7 @@ export function getSupabaseConfigStatus() {
     url: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
   };
 }
+
+export function getDriverLoginEmail() {
+  return process.env.NEXT_PUBLIC_SUPABASE_DRIVER_EMAIL ?? "driver@cabsonline.local";
+}

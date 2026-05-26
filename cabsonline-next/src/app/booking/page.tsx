@@ -1,7 +1,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import MapPicker, { type MapPoint } from "@/components/MapPicker";
+import MapPicker, {
+  type MapPoint,
+  type MapSelectionMode,
+} from "@/components/MapPicker";
 import { formatDate, formatTime } from "@/lib/bookings/format";
 import {
   hasBookingFormErrors,
@@ -12,52 +15,270 @@ import {
 } from "@/lib/bookings/validation";
 import { createPublicBooking } from "@/lib/supabase/bookings";
 
-const initialValues: BookingFormValues = {
-  customer_name: "",
-  destination_latitude: null,
-  destination_longitude: null,
-  destination_suburb: "",
-  phone: "",
-  pickup_date: "",
-  pickup_latitude: null,
-  pickup_longitude: null,
-  pickup_suburb: "",
-  pickup_time: "",
-  street_name: "",
-  street_number: "",
-  unit_number: "",
+function createInitialValues(): BookingFormValues {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return {
+    customer_name: "",
+    destination_latitude: null,
+    destination_longitude: null,
+    destination_suburb: "",
+    phone: "",
+    pickup_date: `${year}-${month}-${day}`,
+    pickup_latitude: null,
+    pickup_longitude: null,
+    pickup_suburb: "",
+    pickup_time: now.toTimeString().slice(0, 5),
+    street_name: "",
+    street_number: "",
+    unit_number: "",
+  };
+}
+
+const inputNames: Record<keyof BookingFormValues, string> = {
+  customer_name: "cname",
+  destination_latitude: "destination_latitude",
+  destination_longitude: "destination_longitude",
+  destination_suburb: "dsbname",
+  phone: "phone",
+  pickup_date: "date",
+  pickup_latitude: "pickup_latitude",
+  pickup_longitude: "pickup_longitude",
+  pickup_suburb: "sbname",
+  pickup_time: "time",
+  street_name: "stname",
+  street_number: "snumber",
+  unit_number: "unumber",
 };
 
+function calculateDistanceKm(start: MapPoint | null, end: MapPoint | null) {
+  if (!start || !end) {
+    return null;
+  }
+
+  const earthRadiusKm = 6371;
+  const latitudeDelta = ((end.latitude - start.latitude) * Math.PI) / 180;
+  const longitudeDelta = ((end.longitude - start.longitude) * Math.PI) / 180;
+  const startLatitude = (start.latitude * Math.PI) / 180;
+  const endLatitude = (end.latitude * Math.PI) / 180;
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(startLatitude) *
+      Math.cos(endLatitude) *
+      Math.sin(longitudeDelta / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function getSuburbFromAddress(address: Record<string, string | undefined>) {
+  return (
+    address.suburb ??
+    address.city_district ??
+    address.neighbourhood ??
+    address.quarter ??
+    address.village ??
+    address.town ??
+    address.city ??
+    ""
+  );
+}
+
 export default function BookingPage() {
-  const [values, setValues] = useState(initialValues);
+  const [values, setValues] = useState(createInitialValues);
   const [errors, setErrors] = useState<BookingFormErrors>({});
+  const [focusPoint, setFocusPoint] = useState<MapPoint | null>(null);
+  const [mapMode, setMapMode] = useState<MapSelectionMode>("pickup");
   const [createdBooking, setCreatedBooking] =
     useState<{
       booking_reference: string;
       pickup_date: string;
       pickup_time: string;
     } | null>(null);
+  const [mapMessage, setMapMessage] = useState("");
+  const [mapLookupType, setMapLookupType] = useState<
+    "pickup" | "destination" | null
+  >(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const pickupPoint =
+    values.pickup_latitude !== null && values.pickup_longitude !== null
+      ? {
+          latitude: values.pickup_latitude,
+          longitude: values.pickup_longitude,
+        }
+      : null;
+  const destinationPoint =
+    values.destination_latitude !== null &&
+    values.destination_longitude !== null
+      ? {
+          latitude: values.destination_latitude,
+          longitude: values.destination_longitude,
+        }
+      : null;
+  const distanceKm = calculateDistanceKm(pickupPoint, destinationPoint);
 
   function updateValue(name: keyof BookingFormValues, value: string) {
     setValues((current) => ({ ...current, [name]: value }));
   }
 
-  function updatePickup(point: MapPoint) {
+  function setPickupPoint(point: MapPoint) {
     setValues((current) => ({
       ...current,
       pickup_latitude: point.latitude,
       pickup_longitude: point.longitude,
     }));
+    setFocusPoint(point);
   }
 
-  function updateDestination(point: MapPoint) {
+  function setDestinationPoint(point: MapPoint) {
     setValues((current) => ({
       ...current,
       destination_latitude: point.latitude,
       destination_longitude: point.longitude,
     }));
+    setFocusPoint(point);
+  }
+
+  function clearPickupPoint() {
+    setValues((current) => ({
+      ...current,
+      pickup_latitude: null,
+      pickup_longitude: null,
+    }));
+    setFocusPoint(null);
+    setMapMode("pickup");
+  }
+
+  function clearDestinationPoint() {
+    setValues((current) => ({
+      ...current,
+      destination_latitude: null,
+      destination_longitude: null,
+    }));
+    setFocusPoint(null);
+    setMapMode("destination");
+  }
+
+  async function updateSuburbFromPoint(
+    mode: MapSelectionMode,
+    point: MapPoint,
+  ) {
+    try {
+      const params = new URLSearchParams({
+        format: "jsonv2",
+        lat: point.latitude.toString(),
+        lon: point.longitude.toString(),
+      });
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?${params.toString()}`,
+      );
+
+      if (!response.ok) {
+        return;
+      }
+
+      const result: { address?: Record<string, string | undefined> } =
+        await response.json();
+      const suburb = result.address ? getSuburbFromAddress(result.address) : "";
+
+      if (!suburb) {
+        return;
+      }
+
+      setValues((current) => ({
+        ...current,
+        [mode === "pickup" ? "pickup_suburb" : "destination_suburb"]:
+          suburb,
+      }));
+    } catch {
+      setMapMessage("Point selected, but suburb lookup was unavailable.");
+    }
+  }
+
+  function handleMapPointSelect(mode: MapSelectionMode, point: MapPoint) {
+    setMapMessage("");
+
+    if (mode === "pickup") {
+      setPickupPoint(point);
+      setMapMode("destination");
+    } else {
+      setDestinationPoint(point);
+      setMapMode("pickup");
+    }
+
+    void updateSuburbFromPoint(mode, point);
+  }
+
+  async function showLocationOnMap(type: "pickup" | "destination") {
+    setMapMessage("");
+
+    const query =
+      type === "pickup"
+        ? [
+            values.street_number.trim(),
+            values.street_name.trim(),
+            values.pickup_suburb.trim(),
+            "New Zealand",
+          ]
+            .filter(Boolean)
+            .join(", ")
+        : [values.destination_suburb.trim(), "New Zealand"]
+            .filter(Boolean)
+            .join(", ");
+
+    if (type === "pickup" && (!values.street_number.trim() || !values.street_name.trim())) {
+      setMapMessage("Enter a pickup street number and street name first.");
+      return;
+    }
+
+    if (type === "destination" && !values.destination_suburb.trim()) {
+      setMapMessage("Enter a destination suburb first.");
+      return;
+    }
+
+    setMapLookupType(type);
+
+    try {
+      const params = new URLSearchParams({
+        countrycodes: "nz",
+        format: "jsonv2",
+        limit: "1",
+        q: query,
+      });
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?${params.toString()}`,
+      );
+
+      if (!response.ok) {
+        throw new Error("Location lookup failed.");
+      }
+
+      const results: { lat: string; lon: string }[] = await response.json();
+      const result = results[0];
+
+      if (!result) {
+        setMapMessage("Could not find that location. Try adding more detail.");
+        return;
+      }
+
+      const point = {
+        latitude: Number(result.lat),
+        longitude: Number(result.lon),
+      };
+
+      if (type === "pickup") {
+        setPickupPoint(point);
+      } else {
+        setDestinationPoint(point);
+      }
+    } catch {
+      setMapMessage("Could not show that location on the map.");
+    } finally {
+      setMapLookupType(null);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -99,7 +320,7 @@ export default function BookingPage() {
     }
 
     setCreatedBooking(data);
-    setValues(initialValues);
+    setValues(createInitialValues());
     setErrors({});
   }
 
@@ -111,28 +332,17 @@ export default function BookingPage() {
         </p>
         <h1 className="mt-2 text-3xl font-bold text-zinc-950">Book a cab</h1>
         <p className="mt-3 max-w-2xl text-zinc-600">
-          Enter the booking details and optionally choose pickup and destination
-          points on the map.
+          Enter the booking details and use the map to preview pickup and
+          destination locations.
         </p>
       </section>
 
       {createdBooking ? (
         <section className="rounded-lg border border-green-200 bg-green-50 p-5 text-green-950">
           <h2 className="text-lg font-semibold">Booking confirmed</h2>
-          <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-3">
-            <div>
-              <dt className="font-medium">Reference</dt>
-              <dd>{createdBooking.booking_reference}</dd>
-            </div>
-            <div>
-              <dt className="font-medium">Pickup date</dt>
-              <dd>{formatDate(createdBooking.pickup_date)}</dd>
-            </div>
-            <div>
-              <dt className="font-medium">Pickup time</dt>
-              <dd>{formatTime(createdBooking.pickup_time)}</dd>
-            </div>
-          </dl>
+          <p className="mt-3 whitespace-pre-line text-sm" id="reference">
+            {`Thank you for your booking!\n\nBooking reference number: ${createdBooking.booking_reference}\nPickup time: ${formatTime(createdBooking.pickup_time)}\nPickup date: ${formatDate(createdBooking.pickup_date)}`}
+          </p>
         </section>
       ) : null}
 
@@ -146,6 +356,7 @@ export default function BookingPage() {
             label="Customer name"
             maxLength={100}
             name="customer_name"
+            htmlName={inputNames.customer_name}
             onChange={updateValue}
             value={values.customer_name}
           />
@@ -155,6 +366,7 @@ export default function BookingPage() {
             label="Phone number"
             maxLength={12}
             name="phone"
+            htmlName={inputNames.phone}
             onChange={updateValue}
             value={values.phone}
           />
@@ -167,6 +379,7 @@ export default function BookingPage() {
             label="Unit number"
             maxLength={10}
             name="unit_number"
+            htmlName={inputNames.unit_number}
             onChange={updateValue}
             value={values.unit_number}
           />
@@ -176,6 +389,7 @@ export default function BookingPage() {
             label="Street number"
             maxLength={10}
             name="street_number"
+            htmlName={inputNames.street_number}
             onChange={updateValue}
             value={values.street_number}
           />
@@ -184,6 +398,7 @@ export default function BookingPage() {
             label="Street name"
             maxLength={50}
             name="street_name"
+            htmlName={inputNames.street_name}
             onChange={updateValue}
             value={values.street_name}
           />
@@ -195,6 +410,7 @@ export default function BookingPage() {
             label="Pickup suburb"
             maxLength={50}
             name="pickup_suburb"
+            htmlName={inputNames.pickup_suburb}
             onChange={updateValue}
             value={values.pickup_suburb}
           />
@@ -203,6 +419,7 @@ export default function BookingPage() {
             label="Destination suburb"
             maxLength={50}
             name="destination_suburb"
+            htmlName={inputNames.destination_suburb}
             onChange={updateValue}
             value={values.destination_suburb}
           />
@@ -213,6 +430,7 @@ export default function BookingPage() {
             error={errors.pickup_date}
             label="Pickup date"
             name="pickup_date"
+            htmlName={inputNames.pickup_date}
             onChange={updateValue}
             type="date"
             value={values.pickup_date}
@@ -221,32 +439,53 @@ export default function BookingPage() {
             error={errors.pickup_time}
             label="Pickup time"
             name="pickup_time"
+            htmlName={inputNames.pickup_time}
             onChange={updateValue}
             type="time"
             value={values.pickup_time}
           />
         </div>
 
+        <section className="grid gap-3">
+          <div className="flex flex-wrap gap-3">
+            <button
+              className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={mapLookupType !== null}
+              onClick={() => showLocationOnMap("pickup")}
+              type="button"
+            >
+              {mapLookupType === "pickup"
+                ? "Finding pickup..."
+                : "Show pickup on map"}
+            </button>
+            <button
+              className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={mapLookupType !== null}
+              onClick={() => showLocationOnMap("destination")}
+              type="button"
+            >
+              {mapLookupType === "destination"
+                ? "Finding destination..."
+                : "Show destination on map"}
+            </button>
+          </div>
+          {mapMessage ? (
+            <p className="rounded-md bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+              {mapMessage}
+            </p>
+          ) : null}
+        </section>
+
         <MapPicker
-          destination={
-            values.destination_latitude !== null &&
-            values.destination_longitude !== null
-              ? {
-                  latitude: values.destination_latitude,
-                  longitude: values.destination_longitude,
-                }
-              : null
-          }
-          onDestinationChange={updateDestination}
-          onPickupChange={updatePickup}
-          pickup={
-            values.pickup_latitude !== null && values.pickup_longitude !== null
-              ? {
-                  latitude: values.pickup_latitude,
-                  longitude: values.pickup_longitude,
-                }
-              : null
-          }
+          activeMode={mapMode}
+          distanceKm={distanceKm}
+          destination={destinationPoint}
+          focusPoint={focusPoint}
+          onClearDestination={clearDestinationPoint}
+          onClearPickup={clearPickupPoint}
+          onModeChange={setMapMode}
+          onPointSelect={handleMapPointSelect}
+          pickup={pickupPoint}
         />
 
         {submitError ? (
@@ -269,6 +508,7 @@ export default function BookingPage() {
 
 function TextField({
   error,
+  htmlName,
   inputMode,
   label,
   maxLength,
@@ -278,6 +518,7 @@ function TextField({
   value,
 }: {
   error?: string;
+  htmlName: string;
   inputMode?: "numeric";
   label: string;
   maxLength?: number;
@@ -293,7 +534,7 @@ function TextField({
         className="rounded-md border border-zinc-300 px-3 py-2 text-zinc-950"
         inputMode={inputMode}
         maxLength={maxLength}
-        name={name}
+        name={htmlName}
         onChange={(event) => onChange(name, event.target.value)}
         onInput={(event) => onChange(name, event.currentTarget.value)}
         type={type}

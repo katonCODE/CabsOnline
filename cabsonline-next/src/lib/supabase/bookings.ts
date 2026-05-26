@@ -1,3 +1,4 @@
+import { getDriverProfileId } from "@/lib/auth/driverSession";
 import { supabase } from "./client";
 import type {
   BookingStatus,
@@ -66,6 +67,10 @@ export async function getBookingByReference(bookingReference: string) {
 }
 
 export async function getUpcomingUnassignedBookings(hoursAhead = 2) {
+  if (hoursAhead === 2) {
+    return getAdminBookings();
+  }
+
   const now = new Date();
   const end = new Date(now);
   end.setHours(end.getHours() + hoursAhead);
@@ -79,23 +84,24 @@ export async function getUpcomingUnassignedBookings(hoursAhead = 2) {
     .order("pickup_at", { ascending: true });
 }
 
-export async function getAdminBookings(bookingReference?: string) {
-  const reference = bookingReference?.trim().toUpperCase();
-
-  if (reference) {
-    return getBookingByReference(reference);
-  }
-
-  return getUpcomingUnassignedBookings();
+export async function getAllBookings() {
+  return supabase.rpc("cabsonline_get_active_admin_bookings");
 }
 
-export async function getBookingsWithPickupCoordinates() {
-  return supabase
-    .from("cabsonline_bookings")
-    .select("*")
-    .not("pickup_latitude", "is", null)
-    .not("pickup_longitude", "is", null)
-    .order("pickup_at", { ascending: true });
+export async function getAdminBookings(bookingReference?: string) {
+  const reference = bookingReference?.trim().toUpperCase();
+  return supabase.rpc("cabsonline_get_admin_bookings", {
+    p_booking_reference: reference || null,
+  });
+}
+
+export async function getBookingsWithPickupCoordinates(
+  bookingReference?: string | null,
+) {
+  const reference = bookingReference?.trim().toUpperCase();
+  return supabase.rpc("cabsonline_get_admin_map_bookings", {
+    p_booking_reference: reference || null,
+  });
 }
 
 export async function updateBookingStatus(
@@ -113,21 +119,20 @@ export async function updateBookingStatus(
     .single();
 }
 
+export async function getDefaultDriverProfileId() {
+  return supabase.rpc("cabsonline_get_default_driver_profile_id").single();
+}
+
 export async function assignBooking(
   bookingReference: string,
   driverProfileId?: string,
 ) {
-  const updates: CabsonlineBookingUpdate = {
-    assigned_driver_profile_id: driverProfileId ?? null,
-    status: "assigned",
-  };
+  const profileId = driverProfileId ?? getDriverProfileId();
 
-  return supabase
-    .from("cabsonline_bookings")
-    .update(updates)
-    .eq("booking_reference", bookingReference)
-    .select()
-    .single();
+  return supabase.rpc("cabsonline_assign_booking", {
+    p_booking_reference: bookingReference,
+    p_driver_profile_id: profileId,
+  });
 }
 
 export function formatBookingReference(booking: CabsonlineBooking) {
